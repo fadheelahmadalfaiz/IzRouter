@@ -266,6 +266,108 @@ const GUARDS = [
       },
     ],
   },
+  {
+    // Fork-only Qoder fixes (upstream decolua/9router#5051, still open). Three
+    // independent behaviours, all absent from upstream, so a `-X theirs` merge
+    // silently reverts them:
+    //   1. code 10605 is a model-queue throttle, not a billing block -- the
+    //      executor polls queue/status and replays instead of returning 403
+    //      (which chatCore reads as insufficient_quota and locks for minutes);
+    //   2. Sonus (`smodel`) / Cantus (`cmodel`) get a static model_config so
+    //      they route even when the per-account catalog omits them;
+    //   3. the `qoder` capability table exists, so images are not stripped.
+    // `detectCorrupt` catches the specific regression of re-adding 10605 to the
+    // billing branch, which would look "fine" but restore the 403 bug.
+    file: "open-sse/executors/qoder.js",
+    parts: [
+      {
+        label: "qoder model-queue wait (10605 is capacity, not billing)",
+        detectOnly: true,
+        requiresAll: [
+          "parseQoderQueueInfo",
+          "computeQoderQueueDelayMs",
+          "qoderQueueStatusUrl",
+          "peekFirstQoderFrame",
+        ],
+        detectCorrupt: /code === "110" \|\| code === "112" \|\| code === "10605"/,
+      },
+      {
+        label: "qoder static model_config fallback (Sonus/Cantus)",
+        detectOnly: true,
+        requiresAll: ["getQoderStaticModelConfig", "sendOnce"],
+      },
+      {
+        label: "qoder stable machineId (deriveMachineId)",
+        detectOnly: true,
+        requires: ["deriveMachineId"],
+      },
+    ],
+  },
+  {
+    // The queue helpers the executor depends on. A whole new file, so a merge
+    // that reverts the executor would also leave this orphaned -- guard it
+    // separately so the failure names the real cause.
+    file: "open-sse/shared/qoder/queue.js",
+    parts: [
+      {
+        label: "queue payload parsing + status polling helpers",
+        detectOnly: true,
+        requiresAll: [
+          "QODER_QUEUE_CODE",
+          "parseQoderQueueInfo",
+          "parseQoderQueueStatus",
+          "qoderQueueStatusUrl",
+          "qoderQueueMaxWaitMs",
+        ],
+      },
+    ],
+  },
+  {
+    // Static blocks for the frontier pair, plus the capability table that keeps
+    // Qoder models vision-capable. Without the table every id is reported
+    // text-only and a client image is swapped for a placeholder before it ever
+    // reaches the model.
+    file: "open-sse/shared/qoder/constants.js",
+    parts: [
+      {
+        label: "QODER_STATIC_MODEL_CONFIGS + getQoderStaticModelConfig",
+        detectOnly: true,
+        requiresAll: ["QODER_STATIC_MODEL_CONFIGS", "getQoderStaticModelConfig", "smodel", "cmodel"],
+        minCount: { needle: "smodel", min: 3 },
+      },
+    ],
+  },
+  {
+    file: "open-sse/providers/capabilities.js",
+    parts: [
+      {
+        label: "qoder capability table (vision/reasoning per model id)",
+        detectOnly: true,
+        requiresAll: ['PROVIDER_CAPABILITIES["qoder"] =', "smodel", "cmodel", "qmodel_38max"],
+      },
+    ],
+  },
+  {
+    file: "open-sse/providers/registry/qoder.js",
+    parts: [
+      {
+        label: "Sonus / Cantus advertised in the picker",
+        detectOnly: true,
+        requiresAll: ["smodel", "cmodel"],
+      },
+    ],
+  },
+  {
+    file: "open-sse/services/qoderModels.js",
+    parts: [
+      {
+        label: "static-only keys kept in /v1/models",
+        detectOnly: true,
+        requiresAll: ["QODER_STATIC_MODEL_CONFIGS"],
+        minCount: { needle: "QODER_STATIC_MODEL_CONFIGS", min: 2 },
+      },
+    ],
+  },
 ];
 
 function readFile(rel) {
