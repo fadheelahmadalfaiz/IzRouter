@@ -475,6 +475,23 @@ function ProvidersPageInner() {
       : apikeyEntries.slice(0, APIKEY_INITIAL_VISIBLE);
   const hiddenApikeyCount = apikeyEntries.length - APIKEY_INITIAL_VISIBLE;
 
+  // Web Cookie: providers authenticated by a pasted browser/session cookie
+  // (connections are stored with authType "cookie" — see POST /api/providers).
+  const webCookieEntries = Object.entries(WEB_COOKIE_PROVIDERS)
+    .filter(
+      ([key, info]) =>
+        !info.hidden &&
+        (info.serviceKinds ?? ["llm"]).includes("llm") &&
+        matchSearch(info.name) &&
+        matchStatus(getProviderStats(key, "cookie"), info.noAuth),
+    )
+    .sort(([ka, a], [kb, b]) => {
+      const ca = getProviderStats(ka, "cookie").total > 0 ? 0 : 1;
+      const cb = getProviderStats(kb, "cookie").total > 0 ? 0 : 1;
+      if (ca !== cb) return ca - cb;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+
   if (loading) {
     return (
       <div className="flex flex-col gap-8">
@@ -489,6 +506,7 @@ function ProvidersPageInner() {
     freeEntries.length > 0 ||
     freeTierEntries.length > 0 ||
     apikeyEntries.length > 0 ||
+    webCookieEntries.length > 0 ||
     compatibleProviders.length > 0 ||
     anthropicCompatibleProviders.length > 0;
 
@@ -760,6 +778,16 @@ function ProvidersPageInner() {
               onToggleBulkSelect={() => toggleSelectProvider(key)}
             />
           ))}
+          {webCookieEntries.map(([key, info]) => (
+            <ApiKeyProviderCard
+              key={key}
+              providerId={key}
+              provider={info}
+              stats={getProviderStats(key, "cookie")}
+              authType="cookie"
+              onToggle={(active) => handleToggleProvider(key, "cookie", active)}
+            />
+          ))}
         </div>
         {!isApikeySearching && !showAllApikey && hiddenApikeyCount > 0 && (
           <button
@@ -772,27 +800,6 @@ function ProvidersPageInner() {
         )}
       </div>
       )}
-
-      {/* Web Cookie Providers — use browser subscription cookie instead of API key */}
-      {/* <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            Web Cookie Providers{" "}
-          </h2>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Object.entries(WEB_COOKIE_PROVIDERS).map(([key, info]) => (
-            <ApiKeyProviderCard
-              key={key}
-              providerId={key}
-              provider={info}
-              stats={getProviderStats(key, "apikey")}
-              authType="apikey"
-              onToggle={(active) => handleToggleProvider(key, "apikey", active)}
-            />
-          ))}
-        </div>
-      </div> */}
 
       <AddCompatibleModal
         variant="openai"
