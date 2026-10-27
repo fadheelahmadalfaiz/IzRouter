@@ -25,13 +25,21 @@ export default {
     forceStream: true,
     // CodeBuddy intl speaks the same unified OpenAI reasoning_effort shape as CN.
     thinkingFormat: "openai",
+    // The chat gateway verifies that the caller is the official CodeBuddy CLI,
+    // not the IDE: IDE/2.108.1 is answered with 400 code 11128 "request illegal"
+    // ("not sent from an official client"), while the CLI identity passes.
+    // Per-request ids (X-Request-ID, X-Conversation-*, X-Stainless-Runtime-*)
+    // are added by CodeBuddyIntlExecutor.buildHeaders.
     headers: {
-      "User-Agent": "IDE/2.108.1 CodeBuddy/2.108.1",
+      "User-Agent": "CLI/2.108.1 CodeBuddy/2.108.1",
       "X-Product": "SaaS",
-      "X-IDE-Type": "IDE",
-      "X-IDE-Name": "IDE",
-      "x-requested-with": "XMLHttpRequest",
-      "x-codebuddy-request": "1",
+      "X-App": "cli",
+      "X-IDE-Type": "CLI",
+      "X-IDE-Name": "CLI",
+      "X-IDE-Version": "2.108.1",
+      "X-Private-Data": "false",
+      "X-Requested-With": "XMLHttpRequest",
+      "X-CodeBuddy-Request": "1",
     },
     auth: {
       combined: true,

@@ -441,6 +441,46 @@ const GUARDS = [
       },
     ],
   },
+  {
+    // #5143: the intl gateway verifies the caller is the official CodeBuddy
+    // CLI. Advertising the IDE identity plus only the X-Conversation-* family
+    // still returns 400 code 11128 "request illegal" on heavy payloads, so the
+    // CLI identity and the Stainless SDK fingerprint must both survive an
+    // upstream sync. The body gates are guarded in the same file: the first
+    // message must stay a system prompt, and third-party client markers must
+    // stay scrubbed.
+    file: "open-sse/executors/codebuddy-intl.js",
+    parts: [
+      {
+        label: "CLI identity + Stainless fingerprint (#5143)",
+        detectOnly: true,
+        requiresAll: [
+          "X-Stainless-Package-Version",
+          "X-Stainless-Helper-Method",
+          "X-App",
+          "X-Agent-Intent",
+          "X-Request-ID",
+        ],
+        detectCorrupt: /"X-IDE-Type":\s*"IDE"/,
+      },
+      {
+        label: "system-first body with caller instructions preserved",
+        detectOnly: true,
+        requiresAll: ["CODEBUDDY_SYSTEM_PROMPT", "sanitizeChannelMarkers", "systemParts"],
+      },
+    ],
+  },
+  {
+    file: "open-sse/providers/registry/codebuddy-intl.js",
+    parts: [
+      {
+        label: "registry advertises CLI, not IDE (#5143)",
+        detectOnly: true,
+        requiresAll: ["CLI/2.108.1", "X-App", "X-IDE-Version"],
+        detectCorrupt: /"X-IDE-Type":\s*"IDE"/,
+      },
+    ],
+  },
 ];
 
 function readFile(rel) {

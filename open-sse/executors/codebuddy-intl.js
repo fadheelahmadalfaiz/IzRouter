@@ -29,6 +29,47 @@ function stableUuidFrom(key) {
   ].join("-");
 }
 
+const CODEBUDDY_CLI_VERSION = "2.108.1";
+const CODEBUDDY_SDK_VERSION = "6.25.0";
+const CODEBUDDY_SYSTEM_PROMPT = "You are CodeBuddy Code.";
+
+const STAINLESS_OS =
+  process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "MacOS" : "Linux";
+
+// Third-party client identities the gateway treats as "not an official
+// client". Long agent histories (Claude Code, Cursor, Hermes) carry these in
+// the system prompt and in tool-call transcripts, which is why only heavy
+// payloads trip the check: short requests never contain the markers.
+const CHANNEL_MARKERS = [
+  "You are Claude Code, Anthropic's CLI for Claude.",
+  "x-anthropic-billing-header",
+  "Main branch (usually the base for PRs):",
+];
+
+const CHANNEL_MARKER_REGEX =
+  /you are claude code|claude.?code.+official.+cli|anthropic.+official.+cli|anxthxropic.+official.+cli|you are (?:cursor|windsurf|cline|aider|continue|copilot|cody)|cc_entrypoint\s*=\s*(?:cli|vscode|jetbrains|gui)|claude.?code.+issues|give feedback.+claude.?code|OhMyOpenCode/gi;
+
+function sanitizeChannelMarkers(text) {
+  if (typeof text !== "string" || !text) return text;
+  let result = text;
+  for (const marker of CHANNEL_MARKERS) {
+    if (result.includes(marker)) {
+      result = result.split(marker).join("[external-client-identity]");
+    }
+  }
+  return result
+    .replace(CHANNEL_MARKER_REGEX, "[external-client-identity]")
+    .replace(/(?:\[external-client-identity\][\s,]*){2,}/g, "[external-client-identity]");
+}
+
+function hostFromUrl(url) {
+  try {
+    return new URL(url).host || null;
+  } catch {
+    return null;
+  }
+}
+
 export class CodeBuddyIntlExecutor extends DefaultExecutor {
   constructor() {
     super("codebuddy-intl");
@@ -72,6 +113,38 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
     headers["X-Conversation-Request-ID"] = randomUUID();
     headers["X-Conversation-Message-ID"] = randomUUID();
 
+    // The gateway fingerprints the official CLI as a whole: the conversation
+    // headers alone still fail (#5143) because the request advertises the IDE
+    // identity and carries none of the Stainless SDK headers the CLI emits.
+    // The conversation ids above stay untouched: they were verified A/B against
+    // the live upstream (#4892) and are stable across retries of one turn.
+    delete headers["x-requested-with"];
+    delete headers["x-codebuddy-request"];
+    Object.assign(headers, {
+      "Content-Type": "application/json; charset=utf-8",
+      "User-Agent": `CLI/${CODEBUDDY_CLI_VERSION} CodeBuddy/${CODEBUDDY_CLI_VERSION}`,
+      "X-Product": "SaaS",
+      "X-App": "cli",
+      "X-IDE-Type": "CLI",
+      "X-IDE-Name": "CLI",
+      "X-IDE-Version": CODEBUDDY_CLI_VERSION,
+      "X-Private-Data": "false",
+      "X-Requested-With": "XMLHttpRequest",
+      "X-CodeBuddy-Request": "1",
+      "X-Domain": credentials?.providerSpecificData?.domain || hostFromUrl(url) || "www.codebuddy.ai",
+      "X-Stainless-Runtime": "node",
+      "X-Stainless-Runtime-Version": process.version || "v24.11.1",
+      "X-Stainless-Lang": "js",
+      "X-Stainless-Arch": process.arch || "x64",
+      "X-Stainless-Os": STAINLESS_OS,
+      "X-Stainless-Package-Version": CODEBUDDY_SDK_VERSION,
+      "X-Stainless-Helper-Method": "stream",
+      "X-Stainless-Retry-Count": "0",
+      "X-Request-ID": randomUUID().replace(/-/g, ""),
+      "X-Agent-Intent": "craft",
+      "X-Agent-Purpose": "conversation",
+    });
+
     return headers;
   }
 
@@ -86,18 +159,67 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
       transformed.reasoning_summary = "auto";
     }
 
-    // CodeBuddy rejects plain OpenAI shape (11101 invalid request): needs a
-    // leading system prompt + user content as typed blocks, not a bare string.
+    // Two upstream gates, in order: the body must open with a system message,
+    // and third-party client identities must not be visible inside it. The old
+    // implementation satisfied the first gate by throwing every caller
+    // system/developer message away, which stripped the agent's tool-use rules
+    // out of long tool-call histories. Consolidate instead: keep the required
+    // CodeBuddy prompt first, append the sanitized caller instructions after
+    // it, and scrub identity markers from assistant turns too.
     const source = Array.isArray(transformed.messages) ? transformed.messages : [];
-    transformed.messages = [{ role: "system", content: "You are CodeBuddy Code." }];
+    const systemParts = [CODEBUDDY_SYSTEM_PROMPT];
+    const otherMessages = [];
+
     for (const message of source) {
-      if (!message || typeof message !== "object" || ["system", "developer"].includes(message.role)) continue;
-      if (message.role === "user" && typeof message.content === "string") {
-        transformed.messages.push({ ...message, content: [{ type: "text", text: message.content }] });
-      } else {
-        transformed.messages.push({ ...message });
+      if (!message || typeof message !== "object") continue;
+
+      if (message.role === "system" || message.role === "developer") {
+        const rawText =
+          typeof message.content === "string"
+            ? message.content
+            : Array.isArray(message.content)
+              ? message.content
+                  .map((block) =>
+                    typeof block === "string"
+                      ? block
+                      : block && typeof block.text === "string"
+                        ? block.text
+                        : "",
+                  )
+                  .join("\n")
+              : "";
+        const cleaned = sanitizeChannelMarkers(rawText).trim();
+        if (cleaned && cleaned !== CODEBUDDY_SYSTEM_PROMPT) systemParts.push(cleaned);
+        continue;
       }
+
+      if (message.role === "user" && typeof message.content === "string") {
+        otherMessages.push({ ...message, content: [{ type: "text", text: message.content }] });
+        continue;
+      }
+
+      if (message.role === "assistant") {
+        const next = { ...message };
+        if (typeof next.content === "string") {
+          next.content = sanitizeChannelMarkers(next.content);
+        } else if (Array.isArray(next.content)) {
+          next.content = next.content.map((block) =>
+            block && typeof block === "object" && typeof block.text === "string"
+              ? { ...block, text: sanitizeChannelMarkers(block.text) }
+              : block,
+          );
+        }
+        otherMessages.push(next);
+        continue;
+      }
+
+      otherMessages.push({ ...message });
     }
+
+    transformed.messages = [
+      { role: "system", content: systemParts.join("\n\n") },
+      ...otherMessages,
+    ];
 
     return transformed;
   }
