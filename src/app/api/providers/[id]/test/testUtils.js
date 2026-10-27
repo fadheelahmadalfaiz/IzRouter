@@ -269,6 +269,46 @@ function parseProviderErrorMessage(bodyText, fallback) {
   return bodyText.trim() || fallback;
 }
 
+// Explain a failed probe with what the upstream actually answered, and say
+// whose problem it probably is. A blanket "Invalid API key" for every non-2xx
+// sends people chasing a key issue that does not exist — the same 403 is
+// routinely a User-Agent or IP gate (sakoo denies `User-Agent: node`), and a
+// 404 usually means the base URL already ends in a path.
+async function describeUpstreamRejection(res, probe) {
+  const status = res.status;
+  let bodyText = "";
+  try {
+    bodyText = await res.text();
+  } catch {
+    /* body already consumed or unreadable; the status alone still helps */
+  }
+  const detail = parseProviderErrorMessage(bodyText, "");
+  const suffix = detail ? `: ${detail}` : "";
+
+  if (status === 401) {
+    return `HTTP 401 from /${probe} — the upstream rejected the API key${suffix}`;
+  }
+  if (status === 403) {
+    return (
+      `HTTP 403 from /${probe} — access denied. The key may be valid; ` +
+      `upstreams commonly gate this on User-Agent or client IP${suffix}`
+    );
+  }
+  if (status === 404) {
+    return (
+      `HTTP 404 from /${probe} — check the Base URL. It must be the API root ` +
+      `(e.g. https://host/v1), not a full endpoint like …/v1/chat/completions${suffix}`
+    );
+  }
+  if (status === 429) {
+    return `HTTP 429 from /${probe} — rate limited or every account is cooling down${suffix}`;
+  }
+  if (status >= 500) {
+    return `HTTP ${status} from /${probe} — the upstream is failing, not your key${suffix}`;
+  }
+  return `HTTP ${status} from /${probe}${suffix}`;
+}
+
 async function probeCloudCodeAssistAccess(connection, accessToken, effectiveProxy = null) {
   const userAgent = connection.provider === "antigravity"
     ? (ANTIGRAVITY_CONFIG.loadCodeAssistUserAgent || "antigravity/hub/2.24.0 darwin/arm64")
@@ -559,7 +599,12 @@ async function testApiKeyConnection(connection, effectiveProxy = null) {
       const res = await fetchWithConnectionProxy(`${modelsBase.replace(/\/$/, "")}/models`, {
         headers: { "Authorization": `Bearer ${connection.apiKey}` },
       }, effectiveProxy);
-      return { valid: res.ok, error: res.ok ? null : "Invalid API key or base URL" };
+      if (res.ok) return { valid: true, error: null };
+      // Report what the upstream actually said. "Invalid API key" for every
+      // non-2xx sends people hunting a key problem that may not exist: a 403
+      // here is just as often a User-Agent or IP gate, and a 404 means the
+      // base URL already ends in a path (…/v1/chat/completions/models).
+      return { valid: false, error: await describeUpstreamRejection(res, "models") };
     } catch (err) {
       return { valid: false, error: err.message };
     }
@@ -589,7 +634,10 @@ async function testApiKeyConnection(connection, effectiveProxy = null) {
       }, effectiveProxy);
       // 400/529 still confirms key accepted; only 401/403 = bad key
       const valid = res.status !== 401 && res.status !== 403;
-      return { valid, error: valid ? null : "Invalid API key or base URL" };
+      return {
+        valid,
+        error: valid ? null : await describeUpstreamRejection(res, "messages"),
+      };
     } catch (err) {
       return { valid: false, error: err.message };
     }
