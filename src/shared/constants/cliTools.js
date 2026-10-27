@@ -587,6 +587,25 @@ gemini extensions install https://github.com/manalkaff/opendesign
       },
     ],
   },
+  zcode: {
+    id: "zcode",
+    name: "ZCode",
+    image: "/providers/zcode.png",
+    color: "#2563EB",
+    description: "ZCode desktop coding app (Zhipu) — route its models through 9Router",
+    configType: "custom",
+    docsUrl: "https://zcode.z.ai",
+    notes: [
+      {
+        type: "info",
+        text: "9Router writes a provider into ~/.zcode/v2/provider_config.json (and config.json for ZCode 3.13 and older). ZCode then lists every 9Router model in its own model picker.",
+      },
+      {
+        type: "warning",
+        text: "Restart ZCode after Apply — it reads its provider list at startup.",
+      },
+    ],
+  },
   // HIDDEN: gemini-cli
   // "gemini-cli": {
   //   id: "gemini-cli",

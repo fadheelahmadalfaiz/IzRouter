@@ -368,6 +368,79 @@ const GUARDS = [
       },
     ],
   },
+  {
+    // Fork-only ZCode integration. Upstream decolua has no ZCode support, so a
+    // `-X theirs` merge silently drops every wiring point while leaving the new
+    // files (src/lib/zcodeConfig.js, the zcode-settings route, ZCodeToolCard)
+    // orphaned -- the card would exist but never render.
+    // Detect-only: re-inserting a JSX/switch branch from a snippet is how you
+    // get a case outside its switch, so fail loudly and repair by hand.
+    file: "src/shared/constants/cliTools.js",
+    parts: [
+      {
+        label: "ZCode CLI tool entry",
+        detectOnly: true,
+        requiresAll: ["zcode: {"],
+      },
+    ],
+  },
+  {
+    file: "src/app/(dashboard)/dashboard/cli-tools/components/index.js",
+    parts: [
+      {
+        label: "ZCodeToolCard export",
+        detectOnly: true,
+        requires: ["ZCodeToolCard"],
+      },
+    ],
+  },
+  {
+    file: "src/app/(dashboard)/dashboard/cli-tools/[toolId]/ToolDetailClient.js",
+    parts: [
+      {
+        label: "ZCodeToolCard import + switch case",
+        detectOnly: true,
+        requiresAll: ["ZCodeToolCard"],
+        minCount: { needle: "ZCodeToolCard", min: 2 },
+      },
+    ],
+  },
+  {
+    file: "src/app/api/cli-tools/all-statuses/route.js",
+    parts: [
+      {
+        label: "zcode status getter registration",
+        detectOnly: true,
+        requiresAll: ["zcodeGet"],
+        minCount: { needle: "zcodeGet", min: 2 },
+      },
+    ],
+  },
+  {
+    // Fork-only outbound User-Agent default. Node's fetch sends `User-Agent:
+    // node`, and some upstreams 403 that bare token while serving the same key
+    // from any other UA (sakoo.biz.id does). Upstream decolua has no such
+    // default, so a `-X theirs` merge drops the file and every non-OpenAI
+    // provider silently goes back to 403.
+    file: "open-sse/config/outboundUserAgent.js",
+    parts: [
+      {
+        label: "default outbound User-Agent (avoids bare `node`)",
+        detectOnly: true,
+        requiresAll: ["getOutboundUserAgent", "withDefaultUserAgent"],
+      },
+    ],
+  },
+  {
+    file: "open-sse/utils/proxyFetch.js",
+    parts: [
+      {
+        label: "default User-Agent applied at the fetch choke point",
+        detectOnly: true,
+        requiresAll: ["withDefaultUserAgent"],
+      },
+    ],
+  },
 ];
 
 function readFile(rel) {

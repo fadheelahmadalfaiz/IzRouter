@@ -1,6 +1,7 @@
 import { Readable } from "stream";
 import { MEMORY_CONFIG } from "../config/runtimeConfig.js";
 import { dbg } from "./debugLog.js";
+import { withDefaultUserAgent } from "../config/outboundUserAgent.js";
 
 const originalFetch = globalThis.fetch;
 const proxyDispatchers = new Map();
@@ -334,6 +335,13 @@ async function createBypassRequest(parsedUrl, realIP, options) {
 
 export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
   const targetUrl = typeof url === "string" ? url : url.toString();
+
+  // Node's fetch sends `User-Agent: node` when none is set, and some upstreams
+  // 403 that bare token (see config/outboundUserAgent.js). Fill the gap here,
+  // at the single choke point every outbound request passes through, so no
+  // executor can forget it. A provider-supplied UA still wins.
+  const withUa = { ...options, headers: withDefaultUserAgent(options.headers) };
+  options = withUa;
 
   // Vercel relay: forward request via relay headers
   const vercelRelayUrl = normalizeString(proxyOptions?.vercelRelayUrl);

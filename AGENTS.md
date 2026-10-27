@@ -130,6 +130,8 @@ re-verify after.
 | **dompurify security override** | `package.json` `overrides.dompurify` + the direct `dompurify` dependency |
 | **MIBP branding** | `README.md`, `docker-compose.yml`, `.env.example`, the `MIBP Edition` link in `src/app/(dashboard)/dashboard/profile/page.js` |
 | **Cline free-tier models** | `open-sse/providers/registry/cline.js` `authModes: ["oauth","apikey"]` + `cline-free/*` models; `open-sse/shared/clineAuth.js` product headers |
+| **ZCode integration** | `src/lib/zcodeConfig.js`, `src/app/api/cli-tools/zcode-settings/**`, `src/app/(dashboard)/dashboard/cli-tools/components/ZCodeToolCard.js`, `public/providers/zcode.png`, and its wiring in `cliTools.js` + `components/index.js` + `ToolDetailClient.js` + `all-statuses/route.js`. Guarded by `scripts/guard-fork-features.mjs` (detect-only). |
+| **Outbound User-Agent** | `open-sse/config/outboundUserAgent.js` + its use in `open-sse/utils/proxyFetch.js`. Sends `IzRouter/<version>` instead of undici's bare `node`, which some upstreams 403 (sakoo). Guarded by `scripts/guard-fork-features.mjs` (detect-only). See `docs/OUTBOUND-USER-AGENT.md`. |
 
 ---
 
