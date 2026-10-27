@@ -161,6 +161,43 @@ Docker build depends on `npm ci` against a committed, npm-10-compatible
 lockfile. The fork explicitly removed `package-lock.json` from `.gitignore`
 (commit `76b139b3`).
 
+---
+
+## 8. Undefined identifiers must never reach the Docker build (`verify-no-undef.mjs`)
+
+**DO NOT** remove `RUN node scripts/verify-no-undef.mjs` from the Dockerfile
+builder stage (after `COPY . ./`, before `npm run build`). **DO NOT** delete
+`scripts/verify-no-undef.mjs`.
+
+**WHY:** webpack/SWC compiles files that USE undeclared identifiers - no build
+error - and the shipped bundle then `ReferenceError`s at runtime ("This page
+couldn't load"). The fork's own sweep found nine such identifiers after an
+upstream merge:
+
+- `ConnectionsCard.js` - `useNotificationStore` used, never imported (Providers page crash)
+- `testUtils.js` - `provider` used outside its scope in the qoder branch
+- `stt.js` - `getApiKeyAuthResult` used, never imported
+- `auth.js` - three `recordAntigravity*` helpers used, never imported
+- `gemini-web.js` - `hasTools` dead branch referencing an undeclared identifier
+- `opencode.js` - `IP_LIMIT_BODY` used, constant never defined
+- `chatCore.js` - `resolveProxyConfig` used in `tryNextPool` but missing from the
+  `handleChatCore` signature, so pool rotation would throw
+
+`node --check` does NOT catch these (top-level `return` is legal under the CJS
+wrap) and `next build` does not either. ESLint `no-undef` is the only reliable
+catch.
+
+**Correct procedure after merging upstream / editing code:**
+
+```bash
+node scripts/verify-no-undef.mjs   # must print OK (0 across src + open-sse)
+```
+
+CI enforces it inside the Docker builder stage, where `npm ci` has already
+installed `eslint`/`globals`.
+
+---
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

@@ -347,6 +347,21 @@ function dropAdaptiveReasoningEffort(body) {
   if (body?.reasoning_effort === "auto") delete body.reasoning_effort;
 }
 
+// Free-tier failures that mean "this egress is bad", not "this key is bad", so
+// the request should rotate to another pool instead of dying at the first one.
+// The reason string surfaces (clearable) on the Proxy Fitness page.
+const IP_LIMIT_BODY = /limit|rate|quota|exhausted|capacity|too many|retry/i;
+
+// Reputation blocks: the gateway refuses the egress IP outright ("detected
+// abusive traffic", "not available from your current network"). Same remedy as
+// a rate limit — the POOL's egress is bad, another pool may be clean — but the
+// body carries none of the words above, so it needs its own pattern.
+//
+// Deliberately NOT matched: the fingerprint 403 ("free tier can only be used
+// from within OpenCode"). That is a client-shape problem no pool rotation can
+// fix; marking pools unfit there would just burn quota retrying clean IPs.
+const IP_BLOCK_BODY = /abusive traffic|from your current network/i;
+
 export class OpenCodeExecutor extends BaseExecutor {
   constructor() {
     super("opencode", PROVIDERS.opencode);
@@ -460,13 +475,19 @@ export class OpenCodeExecutor extends BaseExecutor {
   parseError(response, bodyText) {
     const status = response?.status || 0;
     const text = String(bodyText || "");
-    if ((status === 429 || status === 403) && IP_LIMIT_BODY.test(text)) {
-      return {
-        status,
-        message: text.slice(0, 300) || `OpenCode free limit (${status})`,
-        poolScoped: { reason: "ip-limit" },
-      };
-    }
-    return null; // fall through to default parsing
+    if (status !== 429 && status !== 403) return null;
+    // Reputation block wins over the limit pattern: it is a per-egress-IP
+    // verdict from the gateway, so rotating to a clean pool is the only fix.
+    const reason = IP_BLOCK_BODY.test(text)
+      ? "ip-blocked"
+      : IP_LIMIT_BODY.test(text)
+        ? "ip-limit"
+        : null;
+    if (!reason) return null;
+    return {
+      status,
+      message: text.slice(0, 300) || `OpenCode free limit (${status})`,
+      poolScoped: { reason },
+    };
   }
 }

@@ -34,6 +34,10 @@ RUN --mount=type=cache,target=/root/.npm \
     --fetch-timeout=300000
 
 COPY . ./
+# Guard: undefined identifiers compile fine under webpack/SWC but the shipped
+# bundle ReferenceErrors at runtime ("This page couldn't load"). Fails the
+# Docker build before `next build`. See AGENTS.md §8 + scripts/verify-no-undef.mjs.
+RUN node scripts/verify-no-undef.mjs
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 

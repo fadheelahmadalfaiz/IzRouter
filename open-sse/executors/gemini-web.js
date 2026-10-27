@@ -593,26 +593,6 @@ export class GeminiWebExecutor extends BaseExecutor {
       // and those bodies can't be re-read via CDP once the stream completes.
       const baseReply = await readReplyState(page);
 
-      if (hasTools) {
-        const responseText = await waitForGeminiReply({
-          page,
-          baseCount: baseReply.count,
-          baseText: baseReply.lastText,
-          signal,
-        });
-        const cid = `chatcmpl-gwe-${crypto.randomUUID().slice(0, 12)}`;
-        const created = Math.floor(Date.now() / 1000);
-        const toolResponse = await buildGeminiToolResponse(
-          responseText,
-          requestedTools,
-          Boolean(stream),
-          modelId,
-          cid,
-          created
-        );
-        return { response: toolResponse, url: GEMINI_URL, headers: {}, transformedBody: body };
-      }
-
       if (stream) {
         const encoder = new TextEncoder();
         const streamPage = page;

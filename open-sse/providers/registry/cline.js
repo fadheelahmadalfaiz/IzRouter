@@ -58,6 +58,12 @@ export default {
     { id: "cline-free/mimo-v2.6-flash", name: "MiMo V2.6 Flash (Free)" },
     { id: "cline-free/muse-spark-1.3-contributor", name: "Muse Spark 1.3 (Free)" },
     { id: "cline-free/solar-mini4", name: "Solar Mini 4 (Free)" },
+    // Union of the fork and upstream free catalogs, so a model neither side
+    // currently lists as recommended stays reachable when it is offered again.
+    { id: "cline-free/deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash (Free)" },
+    { id: "cline-free/gemini-3.8-flash", name: "Gemini 3.8 Flash (Free)" },
+    { id: "stealth/pixel-canary", name: "Pixel Canary (Free)" },
+    { id: "stealth/space-bunny-alpha", name: "Space Bunny Alpha (Free)" },
   ],
   oauth: {
     appBaseUrl: "https://app.cline.bot",
