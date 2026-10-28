@@ -64,6 +64,19 @@ export async function parseUpstreamError(response, executor = null) {
     bodyText = "";
   }
 
+  // A relay/proxy in front of the provider can answer with an HTML error page
+  // (Cloudflare 1020/1101, nginx 502, ...). That is a transport failure, not a
+  // provider rejection: report it without dumping the page into the client
+  // error and mark it pool-scoped so chatCore marks the pool unfit and retries
+  // through another pool instead of cooling the (healthy) account down.
+  if (/^\s*(?:<!doctype\s+html|<html[\s>])/i.test(bodyText)) {
+    return {
+      statusCode: response.status >= 500 ? response.status : 502,
+      message: `Upstream relay returned an HTML error page (HTTP ${response.status}) instead of JSON.`,
+      poolScoped: { reason: "relay_html_error" },
+    };
+  }
+
   // Let executor-specific parser extract provider-specific fields (e.g. codex resetsAtMs)
   if (executor && typeof executor.parseError === "function") {
     try {
