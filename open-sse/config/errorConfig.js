@@ -60,6 +60,10 @@ export const ERROR_RULES = [
   // --- Text-based rules (checked first, order = priority) ---
   { provider: "codex", text: "model is not supported when using codex with a chatgpt account", cooldownMs: MAX_RATE_LIMIT_COOLDOWN_MS },
   // Intl gateway blocks affect the account/IP, so let the connection back off.
+  // An account-level restriction (code 11140, "restricted for unusual
+  // activity") never clears on retry, so it gets a fixed long cooldown instead
+  // of the short exponential backoff used for the channel-verification 11128.
+  { provider: "codebuddy-intl", text: "account restricted", cooldownMs: MAX_RATE_LIMIT_COOLDOWN_MS },
   { provider: "codebuddy-intl", text: "request illegal", backoff: true },
   { provider: "codebuddy-intl", text: "conversation id missing", backoff: true },
   { text: "no credentials",           cooldownMs: COOLDOWN.long },

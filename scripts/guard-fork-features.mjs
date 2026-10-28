@@ -468,6 +468,11 @@ const GUARDS = [
         detectOnly: true,
         requiresAll: ["CODEBUDDY_SYSTEM_PROMPT", "sanitizeChannelMarkers", "systemParts"],
       },
+      {
+        label: "11140 account restriction is not retried as a channel error",
+        detectOnly: true,
+        requiresAll: ["11140", "account restricted"],
+      },
     ],
   },
   {

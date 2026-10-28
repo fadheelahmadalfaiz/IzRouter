@@ -228,6 +228,35 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
       try {
         const data = JSON.parse(bodyText);
         const msg = data?.msg || data?.message || data?.error?.message || "";
+
+        // Once the channel-verification gate is passed, a flagged account is
+        // answered with code 11140 and msg "request illegal" — the same text as
+        // 11128 — but the display fields say the account itself was restricted
+        // for unusual activity. That is not a request-shape problem: retrying
+        // the same credential (or reporting "insufficient quota") only hides the
+        // real cause, so surface it as a permission error and let the cooldown
+        // rule in errorConfig take the account out of rotation for a while.
+        const display = [
+          data?.displayMsg?.en,
+          data?.displayMsg?.zh,
+          data?.displayTips?.en,
+          data?.displayTips?.zh,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        const restricted =
+          data?.code === 11140 ||
+          /restricted due to unusual activity|account has been restricted|账号存在异常行为/i.test(
+            `${msg} ${display}`,
+          );
+        if (restricted) {
+          return {
+            status: 403,
+            message:
+              "CodeBuddy account restricted for unusual activity — appeal in the official client or use another account.",
+          };
+        }
+
         if (data?.code === 6004 || /超出频率限制|frequency limit|限额/i.test(msg)) {
           let resetsAtMs = null;
           const match = msg.match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})(?:\s*UTC\+?([0-9:]+))?/i);

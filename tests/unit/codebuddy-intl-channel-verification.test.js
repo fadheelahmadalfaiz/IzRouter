@@ -6,6 +6,8 @@
 import { describe, it, expect } from "vitest";
 import { CodeBuddyIntlExecutor } from "../../open-sse/executors/codebuddy-intl.js";
 import codebuddyIntlRegistry from "../../open-sse/providers/registry/codebuddy-intl.js";
+import { checkFallbackError } from "../../open-sse/services/accountFallback.js";
+import { MAX_RATE_LIMIT_COOLDOWN_MS } from "../../open-sse/config/errorConfig.js";
 
 const CHAT_URL = "https://www.codebuddy.ai/v2/chat/completions";
 const MODEL = "deepseek-v4.1-flash";
@@ -159,5 +161,36 @@ describe("codebuddy-intl registry identity (#5143)", () => {
     expect(headers["X-IDE-Name"]).toBe("CLI");
     expect(headers["User-Agent"]).toContain("CLI/");
     expect(headers["X-App"]).toBe("cli");
+  });
+});
+
+describe("codebuddy-intl account restriction (11140)", () => {
+  const exec = new CodeBuddyIntlExecutor();
+  const restrictedBody = JSON.stringify({
+    code: 11140,
+    msg: "request illegal",
+    displayMsg: { en: "Your account has been restricted due to unusual activity" },
+    displayTips: { en: "We detected unusual activity on this account." },
+  });
+
+  it("maps 11140 to a permission error instead of a generic 400", () => {
+    const parsed = exec.parseError({ status: 403 }, restrictedBody);
+    expect(parsed.status).toBe(403);
+    expect(parsed.message).toMatch(/restricted/i);
+  });
+
+  it("does not misclassify the channel-verification 11128 as a restriction", () => {
+    const parsed = exec.parseError(
+      { status: 400 },
+      JSON.stringify({ code: 11128, msg: "request illegal" }),
+    );
+    expect(parsed.message).not.toMatch(/restricted/i);
+  });
+
+  it("cools the restricted account down for the long window", () => {
+    const parsed = exec.parseError({ status: 403 }, restrictedBody);
+    const res = checkFallbackError(parsed.status, parsed.message, 0, "codebuddy-intl");
+    expect(res.shouldFallback).toBe(true);
+    expect(res.cooldownMs).toBe(MAX_RATE_LIMIT_COOLDOWN_MS);
   });
 });
