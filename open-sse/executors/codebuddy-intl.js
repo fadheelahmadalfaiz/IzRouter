@@ -107,11 +107,15 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
           : "";
     const conversationKey = sessionKey || (userText ? `cbai:${userText}` : null);
 
+    // One id per HTTP request, shared by the request and conversation families:
+    // the official plugin reuses a single value (the codebuddyHeaders hook does
+    // the same), and upstream's channel test locks that contract.
+    const requestId = randomUUID();
     headers["X-Conversation-ID"] = conversationKey
       ? stableUuidFrom(conversationKey)
       : randomUUID();
-    headers["X-Conversation-Request-ID"] = randomUUID();
-    headers["X-Conversation-Message-ID"] = randomUUID();
+    headers["X-Conversation-Request-ID"] = requestId;
+    headers["X-Conversation-Message-ID"] = requestId;
 
     // The gateway fingerprints the official CLI as a whole: the conversation
     // headers alone still fail (#5143) because the request advertises the IDE
@@ -140,7 +144,7 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
       "X-Stainless-Package-Version": CODEBUDDY_SDK_VERSION,
       "X-Stainless-Helper-Method": "stream",
       "X-Stainless-Retry-Count": "0",
-      "X-Request-ID": randomUUID().replace(/-/g, ""),
+      "X-Request-ID": requestId,
       "X-Agent-Intent": "craft",
       "X-Agent-Purpose": "conversation",
     });

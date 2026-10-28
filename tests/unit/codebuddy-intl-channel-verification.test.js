@@ -49,7 +49,8 @@ describe("codebuddy-intl outbound identity (#5143)", () => {
 
   it("sends request/agent metadata and derives X-Domain from the URL", () => {
     const h = headersFor({ messages: [{ role: "user", content: "hi" }] });
-    expect(h["X-Request-ID"]).toMatch(/^[0-9a-f]{32}$/);
+    expect(h["X-Request-ID"]).toMatch(UUID_RE);
+    expect(h["X-Request-ID"]).toBe(h["X-Conversation-Request-ID"]);
     expect(h["X-Agent-Intent"]).toBe("craft");
     expect(h["X-Agent-Purpose"]).toBe("conversation");
     expect(h["X-Domain"]).toBe("www.codebuddy.ai");
