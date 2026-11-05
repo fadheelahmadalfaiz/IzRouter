@@ -1,0 +1,3 @@
+# Keep protocol definitions byte-identical to the embedded copy in
+# open-sse/shared/qoder/chat-proto.js; the test compares them verbatim.
+*.proto text eol=lf
