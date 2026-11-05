@@ -171,6 +171,15 @@ jobs:
             npm update --no-audit --no-fund 2>&1 | tail -n 40 || \
               echo "npm update failed; continuing with upstream code only."
             echo "::endgroup::"
+
+            # `npm update` can drop the top-level @emnapi entries that npm 10
+            # (node:22-alpine in the Docker image) needs for `npm ci`. Regenerate
+            # the lockfile with npm 10 and refuse to push an incompatible one,
+            # instead of pushing a commit whose Docker build dies. See AGENTS.md 1.
+            echo "::group::lockfile npm-10 normalisation"
+            npx -y npm@10.9.8 install --package-lock-only --no-audit --no-fund 2>&1 | tail -n 20 || true
+            node scripts/verify-lockfile-npm10.mjs
+            echo "::endgroup::"
           else
             echo "Dependency refresh skipped."
           fi
