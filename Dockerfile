@@ -96,9 +96,15 @@ COPY --from=builder /app/node_modules/node-machine-id ./node_modules/node-machin
 # @grpc/grpc-js + @grpc/proto-loader are loaded through a dynamic import in
 # open-sse/executors/qoder-grpc.js (so a host without them keeps working), which
 # tracing cannot follow. Without them the Qoder gRPC surface is simply absent at
-# runtime and every request falls back to the slower HTTP one.
+# runtime and every request falls back to the slower HTTP one. proto-loader also
+# requires protobufjs, its @protobufjs/* helpers, long and lodash.camelcase at
+# load time; grpc-js requires @js-sdsl/ordered-map. None of them are traced.
 COPY --from=builder /app/node_modules/@grpc ./node_modules/@grpc
+COPY --from=builder /app/node_modules/@js-sdsl ./node_modules/@js-sdsl
+COPY --from=builder /app/node_modules/@protobufjs ./node_modules/@protobufjs
 COPY --from=builder /app/node_modules/protobufjs ./node_modules/protobufjs
+COPY --from=builder /app/node_modules/long ./node_modules/long
+COPY --from=builder /app/node_modules/lodash.camelcase ./node_modules/lodash.camelcase
 # wreq-js + playwright-core (and deps) are lazy-loaded at runtime and omitted by
 # tracing. See https://github.com/decolua/9router/issues/5245
 COPY --from=builder /opt/lazy-runtime/node_modules/. ./node_modules/
