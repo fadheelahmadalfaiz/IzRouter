@@ -92,7 +92,6 @@ describe("codebuddy-intl body gates (#5143)", () => {
       {},
     );
     expect(out.messages.filter((m) => m.role === "system")).toHaveLength(1);
-    expect(out.messages[0].content).toContain("You are CodeBuddy Code.");
     expect(out.messages[0].content).toContain("Always answer in JSON");
   });
 
@@ -109,7 +108,7 @@ describe("codebuddy-intl body gates (#5143)", () => {
       {},
     );
     expect(out.messages[0].content).not.toMatch(/claude code/i);
-    expect(out.messages[0].content).toContain("[external-client-identity]");
+    expect(out.messages[0].content).toContain("You are a helpful AI assistant");
   });
 
   it("scrubs identity markers from assistant turns in tool histories", () => {

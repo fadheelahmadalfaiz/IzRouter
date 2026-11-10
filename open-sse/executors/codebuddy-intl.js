@@ -172,28 +172,8 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
     // CodeBuddy rejects plain OpenAI shape (11101 invalid request): needs a
     // leading system prompt + user content as typed blocks, not a bare string.
     const source = Array.isArray(transformed.messages) ? transformed.messages : [];
-    const clientSystemPrompts = source
-      .filter((m) => m && ["system", "developer"].includes(m.role))
-      .map((m) => {
-        const text =
-          typeof m.content === "string"
-            ? m.content
-            : Array.isArray(m.content)
-              ? m.content.map((c) => c?.text || "").join("\n")
-              : "";
-        if (text && AGENT_PATTERN.test(text)) {
-          return NEUTRAL_PROMPT;
-        }
-        return text;
-      })
-      .filter(Boolean);
-
-    const systemPromptText =
-      clientSystemPrompts.length > 0
-        ? clientSystemPrompts.join("\n\n")
-        : "You are CodeBuddy Code.";
-
-    transformed.messages = [{ role: "system", content: systemPromptText }];
+    const systemParts = [];
+    const otherMessages = [];
     for (const message of source) {
       if (!message || typeof message !== "object") continue;
 
@@ -213,7 +193,10 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
                   .join("\n")
               : "";
         const cleaned = sanitizeChannelMarkers(rawText).trim();
-        if (cleaned && cleaned !== CODEBUDDY_SYSTEM_PROMPT) systemParts.push(cleaned);
+        if (cleaned) {
+          const neutralized = AGENT_PATTERN.test(rawText) ? NEUTRAL_PROMPT : cleaned;
+          if (!systemParts.includes(neutralized)) systemParts.push(neutralized);
+        }
         continue;
       }
 
@@ -241,7 +224,10 @@ export class CodeBuddyIntlExecutor extends DefaultExecutor {
     }
 
     transformed.messages = [
-      { role: "system", content: systemParts.join("\n\n") },
+      {
+        role: "system",
+        content: systemParts.length > 0 ? systemParts.join("\n\n") : CODEBUDDY_SYSTEM_PROMPT,
+      },
       ...otherMessages,
     ];
 
